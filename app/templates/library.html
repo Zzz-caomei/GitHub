@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>关键词知识库</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell">
+    <nav class="topnav">
+      <a class="brand" href="/">视频关键词工作台</a>
+      <div>{% if not current_user.is_internal_tool %}<span class="user-chip">{{ current_user.username }} · {{ current_user.role }}</span>{% endif %}<a href="/">任务</a><a href="/library">知识库</a>{% if not current_user.is_internal_tool %}{% if is_admin %}<a href="/users">账号</a>{% endif %}<a href="/logout">退出</a>{% endif %}</div>
+    </nav>
+    <section class="hero small-hero">
+      <div>
+        <p class="eyebrow">Reusable shot language assets</p>
+        <h1>关键词知识库</h1>
+        <p class="lead">每次完成的视频拆解都会按项目沉淀 Markdown，持续积累镜头、运镜和提示词资源。</p>
+      </div>
+      <div class="stats"><span><b>{{ files|length }}</b>文档</span><span><b>{{ stats.projects }}</b>项目</span></div>
+    </section>
+
+    <section class="panel library-list">
+      {% if files %}
+      {% for file in files %}
+      <div class="library-row">
+        <div>
+          <strong>{{ file.name }}</strong>
+          <p>{{ file.project }} · {{ file.mtime }}</p>
+          <small>{{ file.rel }}</small>
+        </div>
+        <span>MD</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="empty">还没有知识库文档。完成一个上传任务后会自动生成。</div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

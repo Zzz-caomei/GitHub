@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment and secrets
+.env
+*.env
+!.env.example
+
+# Runtime data
+runtime/
+data/
+logs/
+exports/
+knowledge_base/
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated media
+*.mp4
+*.mov
+*.m4v
+*.webm
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.webp
+!docs/**/*.png
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

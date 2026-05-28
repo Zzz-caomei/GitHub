@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShotRelay · 短剧镜头语言资产站</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <main class="login-shell">
+    <section class="login-hero">
+      <p class="eyebrow">ShotRelay Studio Portal</p>
+      <h1>把参考视频变成可复用的镜头语言资产。</h1>
+      <p>上传视频，自动抽帧、切分镜头、生成提示词、沉淀知识库，并按客户项目隔离权限。</p>
+      <div class="login-metrics">
+        <span><b>关键帧</b>联系表</span>
+        <span><b>关键词</b>分镜拆解</span>
+        <span><b>知识库</b>项目沉淀</span>
+      </div>
+    </section>
+    <section class="login-card">
+      <a class="brand login-brand" href="/login">ShotRelay</a>
+      <h2>登录工作台</h2>
+      <p>管理员和客户账号都从这里进入。</p>
+      {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+      <form action="/login" method="post">
+        <label>账号</label>
+        <input name="username" autocomplete="username" required>
+        <label>密码</label>
+        <input name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">进入独立站</button>
+      </form>
+      <small>建议正式域名上线后启用 HTTPS，保障客户上传素材安全。</small>
+    </section>
+  </main>
+</body>
+</html>

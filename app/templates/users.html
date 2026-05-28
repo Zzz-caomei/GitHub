@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>客户账号管理</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell">
+    <nav class="topnav">
+      <a class="brand" href="/">ShotRelay</a>
+      <div><span class="user-chip">{{ current_user.username }} · {{ current_user.role }}</span><a href="/">任务台</a><a href="/library">知识库</a><a href="/users">客户账号</a></div>
+    </nav>
+
+    <section class="hero small-hero">
+      <div>
+        <p class="eyebrow">Customer access control</p>
+        <h1>客户账号管理</h1>
+        <p class="lead">给客户创建独立账号，并绑定允许访问的项目。客户登录后只能看到对应项目的视频、报告、联系表和导出包。</p>
+      </div>
+      <div class="stats"><span><b>{{ users|length }}</b>账号</span><span><b>{{ projects|length }}</b>项目</span></div>
+    </section>
+
+    <section class="panel upload-panel">
+      <div class="section-head compact"><h2>新增 / 更新账号</h2><span>密码留空代表更新账号信息但不改密码</span></div>
+      <form action="/users" method="post">
+        <div class="form-grid two">
+          <div><label>用户名</label><input name="username" required placeholder="例如：client_a"></div>
+          <div><label>密码</label><input name="password" placeholder="新账号必填，更新可留空"></div>
+        </div>
+        <div class="form-grid two">
+          <div>
+            <label>角色</label>
+            <select name="role"><option value="customer">customer 客户</option><option value="admin">admin 管理员</option></select>
+          </div>
+          <div>
+            <label>状态</label>
+            <select name="is_active"><option value="1">启用</option><option value="0">停用</option></select>
+          </div>
+        </div>
+        <label>允许访问的项目</label>
+        <textarea name="allowed_projects" rows="3" placeholder="每行一个项目名，或用逗号分隔。例如：VPS2平台验收"></textarea>
+        <button type="submit">保存账号</button>
+      </form>
+    </section>
+
+    <section class="panel library-list">
+      {% if users %}
+      {% for item in users %}
+      <div class="library-row user-row">
+        <div>
+          <strong>{{ item.username }}</strong>
+          <p>{{ item.role }} · {{ '启用' if item.is_active else '停用' }}</p>
+          <small>{{ item.allowed_projects or '未绑定项目' }}</small>
+        </div>
+        <span>{{ item.updated_at }}</span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="empty">还没有客户账号。管理员环境账号不显示在这里，但仍然可用。</div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

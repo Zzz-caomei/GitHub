@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>视频关键词工作台</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="workbench-body">
+  <main class="workbench-shell">
+    <nav class="workbench-nav">
+      <a class="brand" href="/">视频关键词工作台</a>
+      <div>
+        <a href="/">工作台</a>
+        <a href="/library">知识库</a>
+        {% if not current_user.is_internal_tool %}{% if is_admin %}<a href="/users">账号</a>{% endif %}<a href="/logout">退出</a>{% endif %}
+      </div>
+    </nav>
+
+    <section class="workbench-hero">
+      <div>
+        <p class="eyebrow">参考素材转生产关键词</p>
+        <h1>素材关键词工作台</h1>
+        <p class="lead">上传参考视频或图片，提取镜头效果、运镜、光线、节奏，再套用到新的人物素材，生成可直接用于视频制作的关键词。</p>
+      </div>
+      <div class="quick-stats">
+        <span><b>{{ stats.total }}</b>素材</span>
+        <span><b>{{ stats.done }}</b>完成</span>
+        <span><b>{{ stats.processing }}</b>处理中</span>
+      </div>
+    </section>
+
+    <section class="studio-grid">
+      <aside class="panel source-panel">
+        <div class="panel-kicker">01 添加参考素材</div>
+        <h2>上传并分析</h2>
+        <form action="/upload" method="post" enctype="multipart/form-data" class="stack-form" id="sourceForm">
+          <div class="segmented" aria-label="素材类型">
+            <label><input type="radio" name="media_hint" value="video" checked><span>视频素材</span></label>
+            <label><input type="radio" name="media_hint" value="image"><span>图片素材</span></label>
+          </div>
+
+          <label class="upload-dropzone" for="sourceFile" id="sourceDropzone">
+            <input class="upload-input" id="sourceFile" name="file" type="file" accept="video/*,image/*" required>
+            <span class="upload-icon" id="sourceUploadIcon">+</span>
+            <strong id="sourceDropTitle">点击选择素材文件</strong>
+            <small id="sourceFileName">支持视频或图片，选择后会先预览，点击按钮才会上传分析</small>
+          </label>
+
+          <div class="selected-file-preview is-hidden" id="sourcePreviewWrap" aria-live="polite">
+            <video id="sourceVideoPreview" muted playsinline controls></video>
+            <img id="sourceImagePreview" alt="已选择的参考素材预览">
+            <div class="selected-file-meta">
+              <b id="sourcePreviewName">已选择素材</b>
+              <small>文件还在本地，点击下方“开始上传并分析”后才会出现在分析结果里。</small>
+            </div>
+          </div>
+
+          <div class="option-block">
+            <label>输出类型</label>
+            <div class="option-chips output-chips" id="analysisOptions">
+              <label><input type="radio" name="output_kind" value="全部维度" checked><span>全部</span></label>
+              <label><input type="radio" name="output_kind" value="镜头效果"><span>镜头效果</span></label>
+              <label><input type="radio" name="output_kind" value="运镜方式"><span>运镜</span></label>
+              <label><input type="radio" name="output_kind" value="8秒分镜脚本"><span>脚本</span></label>
+            </div>
+          </div>
+
+          <label>重点分析什么</label>
+          <textarea name="analysis_goal" id="analysisGoal" rows="5" placeholder="例如：重点提取高速跟拍、低机位、动态模糊、冷暖光线，并输出可用于 8 秒视频的关键词"></textarea>
+          <button type="submit" id="uploadSubmit">开始上传并分析</button>
+        </form>
+
+        <div class="history-strip">
+          <div class="section-head compact"><h3>素材记录</h3><span>{{ tasks|length }} 条</span></div>
+          {% if tasks %}
+          <div class="mini-task-list">
+            {% for task in tasks[:5] %}
+            <a href="/tasks/{{ task.id }}" class="mini-task">
+              <span class="status {{ task.status }}">{{ task.status_label }}</span>
+              <strong>{{ task.record_title }}</strong>
+              <small>{{ task.record_meta }}</small>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="muted-note">暂无素材。先上传一个参考视频或图片。</p>
+          {% endif %}
+        </div>
+      </aside>
+
+      <section class="panel analysis-panel">
+        <div class="panel-kicker">02 提取镜头关键词</div>
+        <div class="section-head compact">
+          <h2>分析结果</h2>
+          {% if latest_task %}<a class="button ghost" href="/tasks/{{ latest_task.id }}">查看完整报告</a>{% endif %}
+        </div>
+        {% if latest_task %}
+        <div class="current-material">
+          <div class="material-heading clean-material-heading">
+            <span class="status {{ latest_task.status }}" id="latestStatus">{{ latest_task.status_label }}</span>
+            {% if latest_task.status == 'done' %}
+            <h3>素材分析完成</h3>
+            <p>下方是关键帧预览；右侧已经整理成可复制关键词。</p>
+            {% elif latest_task.status == 'failed' %}
+            <h3>素材分析失败</h3>
+            <p>请重新上传素材，或换成更小的常见视频/图片格式。</p>
+            {% else %}
+            <h3>正在分析素材</h3>
+            <p>系统正在抽取关键帧并整理镜头关键词。</p>
+            {% endif %}
+          </div>
+          <div class="progress-composer" id="latestProgress" data-progress="{{ latest_task.progress }}" data-status="{{ latest_task.status }}">
+            <div class="progress-meta">
+              <span>生成进度</span>
+              <strong id="latestProgressText">{{ latest_task.progress }}%</strong>
+            </div>
+            <div class="meter smart-meter"><i id="latestBar" style="width: {{ latest_task.progress }}%"></i></div>
+            <div class="progress-stage">
+              <b id="latestStageLabel">正在准备分析</b>
+              <small id="latestStageHint">视频越大，抽帧和生成报告耗时会更久。</small>
+            </div>
+            <div class="progress-steps" id="latestSteps" aria-label="生成阶段">
+              <span data-threshold="8">接收素材</span>
+              <span data-threshold="25">读取信息</span>
+              <span data-threshold="52">抽取关键帧</span>
+              <span data-threshold="70">生成预览</span>
+              <span data-threshold="84">拆解镜头</span>
+              <span data-threshold="100">整理关键词</span>
+            </div>
+          </div>
+        </div>
+        {% if latest_task.sheet_path %}<img class="material-preview" src="/tasks/{{ latest_task.id }}/contact" alt="参考素材关键帧">{% endif %}
+        <div class="keyword-board" id="keywordBoard">
+          <article data-key="镜头效果"><b>镜头效果</b><p>{{ latest_task.tags or '等待从素材中提取景别、机位、焦段、构图、景深与质感。' }}</p></article>
+          <article data-key="运镜方式"><b>运镜方式</b><p>推拉摇移、跟拍、环绕、升降、手持感、速度变化、转场方式。</p></article>
+          <article data-key="光线色彩"><b>光线色彩</b><p>主光方向、明暗反差、冷暖关系、色彩倾向、画面氛围。</p></article>
+          <article data-key="节奏氛围"><b>节奏氛围</b><p>{{ latest_task.analysis_goal or '根据参考素材整理节奏、情绪、动态模糊和叙事重点。' }}</p></article>
+          <article data-key="负面控制"><b>负面控制</b><p>避免糊脸、肢体畸形、透视错误、文字乱码、廉价塑料质感、过度锐化。</p></article>
+        </div>
+        {% else %}
+        <div class="empty-state-large compact-empty">
+          <b>等待素材分析</b>
+          <p>上传参考视频或图片后，会按你选择的输出类型整理成可复制内容。</p>
+          <div class="starter-board">
+            <article><span>01</span><strong>镜头效果</strong><small>景别、机位、焦段、构图、景深、质感</small></article>
+            <article><span>02</span><strong>运镜方式</strong><small>推拉摇移、跟拍、环绕、升降、转场</small></article>
+            <article><span>03</span><strong>8秒脚本</strong><small>按 0-2 / 2-5 / 5-8 秒拆分</small></article>
+            <article><span>04</span><strong>全部维度</strong><small>一次性输出镜头、运镜、光线、节奏和负面词</small></article>
+          </div>
+        </div>
+        {% endif %}
+      </section>
+
+      <aside class="panel prompt-panel">
+        <div class="panel-kicker">03 生成可复制关键词</div>
+        <div class="section-head compact">
+          <h2>视频生成关键词</h2>
+          <button type="button" class="button ghost" onclick="copyText('basePrompt', this)">复制</button>
+        </div>
+        <pre id="basePrompt">{% if latest_prompt %}{{ latest_prompt }}{% else %}上传参考素材后，这里会直接显示可复制的视频生成关键词。{% endif %}</pre>
+      </aside>
+    </section>
+
+    <section class="panel remix-panel">
+      <div class="panel-kicker">04 套用同款效果</div>
+      <div class="remix-grid">
+        <div>
+          <h2>添加人物素材和要求</h2>
+          <p class="muted-note">上传现有人物视频或图片，再写明你想保留的人物、动作、场景或产品要求。系统会把上方参考素材的镜头语言组合成新的制作关键词。</p>
+          <label>人物视频 / 图片</label>
+          <input class="file" id="targetFile" type="file" accept="video/*,image/*">
+          <label>你的制作要求</label>
+          <textarea id="targetBrief" rows="5" placeholder="例如：保留人物形象，套用上方高速跟拍和冷暖对比风格，生成 8 秒短视频关键词"></textarea>
+          <button type="button" onclick="composeRemixPrompt()">生成同款视频关键词</button>
+        </div>
+        <div>
+          <div class="section-head compact"><h2>最终关键词</h2><button type="button" class="button ghost" onclick="copyText('remixPrompt', this)">复制</button></div>
+          <pre id="remixPrompt">先上传参考素材并填写人物素材要求，即可生成最终视频制作关键词。</pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sourceFile = document.getElementById('sourceFile');
+    const sourceFileName = document.getElementById('sourceFileName');
+    const sourceForm = document.getElementById('sourceForm');
+    const analysisGoal = document.getElementById('analysisGoal');
+    const sourceDropzone = document.getElementById('sourceDropzone');
+    const sourceDropTitle = document.getElementById('sourceDropTitle');
+    const sourceUploadIcon = document.getElementById('sourceUploadIcon');
+    const sourcePreviewWrap = document.getElementById('sourcePreviewWrap');
+    const sourceVideoPreview = document.getElementById('sourceVideoPreview');
+    const sourceImagePreview = document.getElementById('sourceImagePreview');
+    const sourcePreviewName = document.getElementById('sourcePreviewName');
+    const uploadSubmit = document.getElementById('uploadSubmit');
+    let sourceObjectUrl = null;
+    const mediaRadios = Array.from(document.querySelectorAll('input[name="media_hint"]'));
+
+    function syncFileAccept() {
+      const active = mediaRadios.find((item) => item.checked)?.value || 'video';
+      sourceFile.accept = active === 'image' ? 'image/*' : 'video/*';
+      if (!sourceFile?.files?.length) {
+        sourceFileName.textContent = active === 'image' ? '支持 jpg / png / webp 图片，选择后会先预览' : '支持 mp4 / mov / webm 视频，选择后会先预览';
+        sourceDropTitle.textContent = '点击选择素材文件';
+        sourceUploadIcon.textContent = '+';
+      }
+    }
+    mediaRadios.forEach((radio) => radio.addEventListener('change', syncFileAccept));
+    syncFileAccept();
+
+    function resetSourcePreview() {
+      if (sourceObjectUrl) URL.revokeObjectURL(sourceObjectUrl);
+      sourceObjectUrl = null;
+      sourcePreviewWrap?.classList.add('is-hidden');
+      sourceDropzone?.classList.remove('has-file');
+      if (sourceVideoPreview) sourceVideoPreview.removeAttribute('src');
+      if (sourceImagePreview) sourceImagePreview.removeAttribute('src');
+    }
+
+    sourceFile?.addEventListener('change', () => {
+      const file = sourceFile.files[0];
+      resetSourcePreview();
+      if (!file) return;
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      sourceObjectUrl = URL.createObjectURL(file);
+      sourceFileName.textContent = file.name;
+      sourcePreviewName.textContent = file.name;
+      sourceDropTitle.textContent = '素材已选择，等待上传';
+      sourceUploadIcon.textContent = '✓';
+      sourceDropzone.classList.add('has-file');
+      sourcePreviewWrap.classList.remove('is-hidden', 'show-image', 'show-video');
+      sourcePreviewWrap.classList.add(isImage ? 'show-image' : 'show-video');
+      if (isImage) sourceImagePreview.src = sourceObjectUrl;
+      if (isVideo) sourceVideoPreview.src = sourceObjectUrl;
+      uploadSubmit.textContent = '开始上传并分析这个素材';
+    });
+
+    sourceForm?.addEventListener('submit', () => {
+      if (uploadSubmit) {
+        uploadSubmit.textContent = '正在上传并分析...';
+        uploadSubmit.disabled = true;
+      }
+      const outputKind = document.querySelector('input[name="output_kind"]:checked')?.value || '全部维度';
+      const base = analysisGoal.value.trim();
+      analysisGoal.value = [
+        `输出类型：${outputKind}`,
+        base ? `补充要求：${base}` : '补充要求：请根据素材自动提取镜头效果、运镜、光线、节奏和可复用关键词。'
+      ].join('\n');
+    });
+
+    const latestTaskId = {% if latest_task %}"{{ latest_task.id }}"{% else %}null{% endif %};
+    const latestInitialStatus = {% if latest_task %}"{{ latest_task.status }}"{% else %}null{% endif %};
+    let latestObservedAiStatus = {% if latest_task %}"{{ latest_task.ai_status }}"{% else %}null{% endif %};
+    async function watchLatestTask() {
+      if (!latestTaskId) return;
+      const statusNode = document.getElementById('latestStatus');
+      if (!statusNode) return;
+      const res = await fetch(`/tasks/${latestTaskId}/status`, {cache: 'no-store'});
+      if (!res.ok) return;
+      const data = await res.json();
+      const previousStatus = statusNode.dataset.rawStatus || latestInitialStatus || statusNode.textContent.trim();
+      statusNode.textContent = statusLabel(data.status, data.ai_status);
+      statusNode.dataset.rawStatus = data.status;
+      statusNode.className = `status ${data.status}`;
+      updateProgressUI(data.progress, data.status);
+      const previousAiStatus = latestObservedAiStatus;
+      latestObservedAiStatus = data.ai_status || latestObservedAiStatus;
+      if (data.status === 'queued' || data.status === 'processing' || data.ai_status === 'processing') {
+        setTimeout(watchLatestTask, data.ai_status === 'processing' ? 2600 : 1600);
+      } else if (data.status === 'done' && (previousStatus === 'queued' || previousStatus === 'processing' || previousAiStatus === 'processing' || latestInitialStatus !== 'done')) {
+        location.reload();
+      }
+    }
+    function statusLabel(status, aiStatus) {
+      if (status === 'failed') return '分析失败';
+      if (status === 'done' && aiStatus === 'failed') return '待更新 API';
+      if (status === 'done') return '分析完成';
+      if (status === 'processing') return '处理中';
+      return '等待中';
+    }
+
+    function getProgressStage(progress, status) {
+      if (status === 'failed') return {label: '分析失败', hint: '请检查素材格式或重新上传一个较小的文件。'};
+      if (status === 'done') return {label: '分析完成', hint: '关键词和完整报告已生成，可以复制或查看报告。'};
+      if (status === 'queued') return {label: '排队等待处理', hint: '素材已提交，正在等待后台任务开始。'};
+      if (progress < 15) return {label: '接收素材', hint: '正在确认文件并建立分析任务。'};
+      if (progress < 35) return {label: '读取素材信息', hint: '正在识别时长、尺寸、帧率和素材类型。'};
+      if (progress < 62) return {label: '抽取关键帧', hint: '正在从视频中抽取可用于镜头判断的画面。'};
+      if (progress < 78) return {label: '生成预览图', hint: '正在整理关键帧联系表，方便快速查看画面结构。'};
+      if (progress < 92) return {label: '拆解镜头节奏', hint: '正在分析镜头段落、运镜方式、光线和节奏。'};
+      return {label: '整理关键词报告', hint: '正在生成可复制关键词和完整分析报告。'};
+    }
+
+    function updateProgressUI(progress = 0, status = 'queued') {
+      const value = Math.max(0, Math.min(100, Number(progress) || 0));
+      const wrap = document.getElementById('latestProgress');
+      const bar = document.getElementById('latestBar');
+      const text = document.getElementById('latestProgressText');
+      const label = document.getElementById('latestStageLabel');
+      const hint = document.getElementById('latestStageHint');
+      if (!wrap) return;
+      wrap.dataset.progress = String(value);
+      wrap.dataset.status = status;
+      wrap.classList.toggle('is-complete', status === 'done');
+      wrap.classList.toggle('is-failed', status === 'failed');
+      wrap.classList.toggle('is-active', status === 'queued' || status === 'processing');
+      if (bar) bar.style.width = `${value}%`;
+      if (text) text.textContent = `${value}%`;
+      const stage = getProgressStage(value, status);
+      if (label) label.textContent = stage.label;
+      if (hint) hint.textContent = stage.hint;
+      document.querySelectorAll('#latestSteps span').forEach((step) => {
+        const threshold = Number(step.dataset.threshold) || 0;
+        step.classList.toggle('is-done', value >= threshold || status === 'done');
+        step.classList.toggle('is-current', value < threshold && value >= threshold - 18 && status !== 'done' && status !== 'failed');
+      });
+    }
+
+    updateProgressUI(Number(document.getElementById('latestProgress')?.dataset.progress || 0), document.getElementById('latestProgress')?.dataset.status || 'queued');
+
+    watchLatestTask();
+
+    function collectKeywordText() {
+      return Array.from(document.querySelectorAll('#keywordBoard article')).map((card) => {
+        const title = card.querySelector('b')?.innerText || '';
+        const body = card.querySelector('p')?.innerText || '';
+        return `${title}：${body}`;
+      }).join('\n');
+    }
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    }
+
+    async function copyText(id, trigger) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const text = (node.innerText || node.textContent || '').trim();
+      if (!text) return;
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (err) {
+          copied = false;
+        }
+      }
+      if (!copied) copied = fallbackCopy(text);
+      if (trigger) {
+        const oldText = trigger.textContent;
+        trigger.textContent = copied ? '已复制' : '复制失败';
+        trigger.classList.toggle('copied', copied);
+        setTimeout(() => {
+          trigger.textContent = oldText;
+          trigger.classList.remove('copied');
+        }, 1400);
+      }
+    }
+    function composeRemixPrompt() {
+      const file = document.getElementById('targetFile').files[0];
+      const brief = document.getElementById('targetBrief').value.trim() || '保留人物主体，套用参考素材的镜头语言和视觉风格。';
+      const keywords = collectKeywordText() || '请先上传参考素材，提取镜头效果、运镜、光线和节奏。';
+      const fileName = file ? file.name : '未上传人物素材';
+      const output = [
+        '【目标】根据人物素材生成同款风格视频关键词',
+        `【人物素材】${fileName}`,
+        `【制作要求】${brief}`,
+        '',
+        '【套用参考素材风格】',
+        keywords,
+        '',
+        '【最终视频生成关键词】',
+        '以人物素材为主体，保持人物身份、五官和服装一致；套用参考素材的镜头效果、运镜节奏、光线色彩和画面氛围；生成电影感短视频画面，主体清晰，背景有层次，动作自然，镜头运动稳定，画面真实细腻。',
+        '',
+        '【8 秒分镜】',
+        '0-2s：建立主体和场景，使用参考素材的构图与光线氛围。',
+        '2-5s：套用参考素材的核心运镜方式，突出人物动作和情绪。',
+        '5-8s：加强节奏、景深和动态模糊，完成一个清晰收束的镜头。',
+        '',
+        '【负面关键词】',
+        '糊脸、五官变形、肢体畸形、人物身份变化、透视错误、文字乱码、低清晰度、过度锐化、廉价塑料质感、镜头抖动失控'
+      ].join('\n');
+      document.getElementById('remixPrompt').innerText = output;
+    }
+  </script>
+</body>
+</html>

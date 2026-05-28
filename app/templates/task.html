@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ display_title }} · 完整报告</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="shell narrow">
+    <nav class="topnav">
+      <a class="brand" href="/">视频关键词工作台</a>
+      <div>{% if not current_user.is_internal_tool %}<span class="user-chip">{{ current_user.username }} · {{ current_user.role }}</span>{% endif %}<a href="/">任务</a><a href="/library">知识库</a>{% if not current_user.is_internal_tool %}{% if is_admin %}<a href="/users">账号</a>{% endif %}<a href="/logout">退出</a>{% endif %}</div>
+    </nav>
+
+    <a class="back" href="/">← 返回任务列表</a>
+    <section class="panel detail">
+      <div class="status {{ task.status }}" id="status">{{ status_label }}</div>
+      <h1 id="displayTitle">{{ display_title }}</h1>
+      <p class="lead" id="displayLead">{{ display_lead }}</p>
+      {% if task.tags %}<div class="tags big">{{ task.tags }}</div>{% endif %}
+      <div class="meter large"><i id="bar" style="width: {{ task.progress }}%"></i></div>
+      <div class="meta">
+        <span id="progress">进度 {{ task.progress }}%</span>
+        <span id="spec">{{ task.width }}x{{ task.height }} · {{ '%.2f'|format(task.duration or 0) }}s</span>
+        <span>{{ task.created_at }}</span>
+      </div>
+      <p class="error" id="error">{{ task.error }}</p>
+    </section>
+
+    <section class="panel prompt-box">
+      <div class="section-head compact">
+        <h2>视频生成关键词</h2>
+        <button type="button" onclick="copyPrompt(this)">复制关键词</button>
+      </div>
+      <pre id="promptText" class="keyword-output">{{ keyword_text }}</pre>
+    </section>
+
+
+    <section class="panel ai-panel">
+      <div class="section-head compact">
+        <div>
+          <h2>AI 镜头语言分析</h2>
+          <p class="mini">模型：{{ ai_model }} · 状态：{{ task.ai_status or 'not_started' }}</p>
+        </div>
+        {% if task.status == 'done' and ai_configured and is_admin %}
+        <form action="/tasks/{{ task.id }}/ai-analysis" method="post" class="inline-form"><button type="submit">启动 AI 分析</button></form>
+        {% elif not ai_configured %}
+        <span class="pill muted">未配置 OPENAI_API_KEY</span>
+        {% endif %}
+      </div>
+      {% if task.ai_error %}<p class="error">{{ task.ai_error }}</p>{% endif %}
+      {% if ai_html %}
+      <div class="section-head compact subhead"><h2>AI 分析结果</h2><a class="button ghost" href="/tasks/{{ task.id }}/ai-analysis" target="_blank">打开原文</a></div>
+      <article class="ai-article">{{ ai_html|safe }}</article>
+      {% else %}
+      <p class="lead small">配置 API Key 后，可以让平台直接读取关键帧联系表，自动生成完整镜头语言分析、8 秒分镜脚本、正向关键词和负面关键词。未配置时不影响上传、抽帧、报告和导出。</p>
+      {% endif %}
+    </section>
+
+    <section class="panel result" id="result">
+      {% if task.sheet_path %}
+      <div class="section-head compact">
+        <h2>关键帧联系表</h2>
+        <div class="action-row"><a class="button ghost" href="/tasks/{{ task.id }}/contact" target="_blank">打开图片</a>{% if task.status == 'done' %}<a class="button" href="/tasks/{{ task.id }}/export">导出素材包</a>{% endif %}</div>
+      </div>
+      <img src="/tasks/{{ task.id }}/contact" alt="contact sheet">
+      {% else %}
+      <div class="empty">正在生成关键帧联系表...</div>
+      {% endif %}
+    </section>
+
+    {% if segments %}
+    <section class="panel segments">
+      <h2>自动镜头切分</h2>
+      <div class="segment-list">
+        {% for seg in segments %}
+        <div><b>{{ seg.label }}</b><span>{{ '%.2f'|format(seg.start) }}s - {{ '%.2f'|format(seg.end) }}s</span><p>{{ seg.note }}</p></div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if report_html %}
+    <section class="panel markdown">
+      <div class="section-head compact">
+        <h2>Markdown 报告预览</h2>
+        <div class="action-row"><a class="button" href="/tasks/{{ task.id }}/report" target="_blank">打开原始报告</a>{% if task.status == 'done' %}<a class="button ghost" href="/tasks/{{ task.id }}/export">下载 ZIP</a>{% endif %}</div>
+      </div>
+      <article>{{ report_html|safe }}</article>
+    </section>
+    {% endif %}
+  </main>
+
+  <script>
+    const taskId = {{ task.id|tojson }};
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    }
+    async function copyPrompt(trigger) {
+      const text = (document.querySelector('#promptText')?.innerText || '').trim();
+      if (!text) return;
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (err) {
+          copied = false;
+        }
+      }
+      if (!copied) copied = fallbackCopy(text);
+      if (trigger) {
+        const oldText = trigger.textContent;
+        trigger.textContent = copied ? '已复制' : '复制失败';
+        setTimeout(() => { trigger.textContent = oldText; }, 1400);
+      }
+    }
+    function statusLabel(status, aiStatus) {
+      if (status === 'failed') return '分析失败';
+      if (status === 'done' && aiStatus === 'failed') return '待更新 API';
+      if (status === 'done') return '分析完成';
+      if (status === 'processing') return '处理中';
+      return '等待中';
+    }
+    function displayTitle(status, progress, aiStatus) {
+      if (status === 'failed') return '素材分析失败';
+      if (status === 'done' && aiStatus === 'failed') return '关键词待重新生成';
+      if (status === 'done') return '素材分析完成';
+      if (status === 'processing') return Number(progress || 0) >= 90 ? '正在生成关键词' : '正在拆解素材';
+      return '等待开始分析';
+    }
+    async function refresh() {
+      const res = await fetch(`/tasks/${taskId}/status`, {cache: 'no-store'});
+      if (!res.ok) return;
+      const data = await res.json();
+      document.querySelector('#status').textContent = statusLabel(data.status, data.ai_status);
+      document.querySelector('#status').className = `status ${data.status}`;
+      document.querySelector('#displayTitle').textContent = displayTitle(data.status, data.progress, data.ai_status);
+      document.querySelector('#bar').style.width = `${data.progress}%`;
+      document.querySelector('#progress').textContent = `进度 ${data.progress}%`;
+      document.querySelector('#spec').textContent = `${data.width}x${data.height} · ${(data.duration || 0).toFixed(2)}s`;
+      document.querySelector('#error').textContent = data.error || '';
+      if (data.ai_status === 'done' && !document.querySelector('.ai-article')) location.reload();
+      if (data.status === 'done' && !document.querySelector('#result img')) location.reload();
+      if (data.status !== 'done' && data.status !== 'failed') setTimeout(refresh, 1500);
+    }
+    refresh();
+  </script>
+</body>
+</html>
